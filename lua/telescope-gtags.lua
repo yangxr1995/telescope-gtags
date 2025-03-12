@@ -86,6 +86,33 @@ end
 -- It's ok to update job_running without a lock
 local M = { job_running = false }
 
+-- 新增函数：从命令行输入获取查询词 (2025年新增功能)
+function M.showDefinitionFromInput()
+    -- 使用 vim.fn.input 获取用户输入
+    local current_word = vim.fn.input("Enter definition target: ")
+    if current_word == nil or current_word == "" then
+        vim.notify("No input provided", vim.log.levels.WARN)
+        return
+    end
+    local gtags_result = global_definition(current_word)
+    gtags_picker(gtags_result)
+end
+
+function M.showReferenceFromInput()
+    -- 带历史记录支持的输入（:h input()）
+    local current_word = vim.fn.input({
+        prompt = "Enter reference target: ",
+        completion = "file",  -- 可选自动补全类型
+        default = vim.fn.expand("<cword>")  -- 默认显示光标单词
+    })
+    if current_word == nil or current_word == "" then
+        vim.notify("No input provided", vim.log.levels.WARN)
+        return
+    end
+    local gtags_result = global_reference(current_word)
+    gtags_picker(gtags_result)
+end
+
 function M.showDefinition()
 	local current_word = vim.call("expand", "<cword>")
 	if current_word == nil then
