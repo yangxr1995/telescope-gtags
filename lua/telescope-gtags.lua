@@ -48,23 +48,25 @@ local api = vim.api
 
 -- our picker function: gtags_picker
 local gtags_picker = function(gtags_result)
-	-- return if there is no result
-	if gtags_result.count == 0 then
-		print(string.format("E9999: Error gtags there is no symbol for %s", symbol))
-		return
-	end
+    -- return if there is no result
+    if gtags_result.count == 0 then
+        print(string.format("E9999: Error gtags there is no symbol for %s", symbol))
+        return
+    end
 
-	if gtags_result.count == 1 then
-		vim.api.nvim_command(string.format(":edit +%d %s", gtags_result[1].line_nr, gtags_result[1].path))
-		return
-	end
+    if gtags_result.count == 1 then
+        -- Save current position to tag stack before jumping
+        vim.fn.settagstack(vim.fn.win_getid(), {items = {{tagname = vim.fn.expand('<cword>'), from = vim.fn.getpos('.')}}}, 'a')
+        vim.api.nvim_command(string.format(":edit +%d %s", gtags_result[1].line_nr, gtags_result[1].path))
+        return
+    end
 
-	opts = {}
-	-- print(to_string(gtags_result))
-	pickers.new(opts, {
-		prompt_title = "GNU Gtags",
-		finder = finders.new_table({
-			results = gtags_result,
+    opts = {}
+    -- print(to_string(gtags_result))
+    pickers.new(opts, {
+        prompt_title = "GNU Gtags",
+        finder = finders.new_table({
+            results = gtags_result,
 
             entry_maker = function(entry)
                 -- 获取当前工作目录
@@ -87,10 +89,20 @@ local gtags_picker = function(gtags_result)
             end
 
 
-		}),
-		previewer = conf.grep_previewer(opts),
-		sorter = conf.generic_sorter(opts),
-	}):find()
+        }),
+        previewer = conf.grep_previewer(opts),
+        sorter = conf.generic_sorter(opts),
+        attach_mappings = function(prompt_bufnr, map)
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = action_state.get_selected_entry()
+                -- Save current position to tag stack before jumping
+                vim.fn.settagstack(vim.fn.win_getid(), {items = {{tagname = vim.fn.expand('<cword>'), from = vim.fn.getpos('.')}}}, 'a')
+                vim.api.nvim_command(string.format(":edit +%d %s", selection.lnum, selection.filename))
+            end)
+            return true
+        end,
+    }):find()
 end
 
 -- It's ok to update job_running without a lock
