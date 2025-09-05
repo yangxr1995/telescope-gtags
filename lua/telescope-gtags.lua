@@ -65,18 +65,28 @@ local gtags_picker = function(gtags_result)
 		prompt_title = "GNU Gtags",
 		finder = finders.new_table({
 			results = gtags_result,
-			entry_maker = function(entry)
-				return {
-					value = entry.raw,
-					ordinal = entry.raw,
-					display = entry.raw,
-					filename = entry.path,
-					path = entry.path,
-					lnum = entry.line_nr,
-					start = entry.line_nr,
-					col = 1,
-				}
-			end,
+
+            entry_maker = function(entry)
+                -- 获取当前工作目录
+                local cwd = vim.fn.getcwd()
+                -- 将相对路径转换为绝对路径
+                local absolute_path = vim.fn.fnamemodify(entry.path, ':p')
+                -- 或者使用更直接的方法：连接工作目录和相对路径
+                -- local absolute_path = vim.fn.resolve(vim.fn.fnamemodify(entry.path, ':p'))
+
+                return {
+                    value = entry.raw,
+                    ordinal = entry.raw,
+                    display = entry.raw,
+                    filename = absolute_path,  -- 使用绝对路径
+                    path = absolute_path,      -- 使用绝对路径
+                    lnum = entry.line_nr,
+                    start = entry.line_nr,
+                    col = 1,
+                }
+            end
+
+
 		}),
 		previewer = conf.grep_previewer(opts),
 		sorter = conf.generic_sorter(opts),
