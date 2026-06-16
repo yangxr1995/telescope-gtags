@@ -418,7 +418,7 @@ M.open_action = function(split)
 	if vim.fn.expand("%:p") == vim.fn.fnamemodify(pfilename, ":p") then
 		vim.api.nvim_win_set_cursor(0, { plnum, 0 })
 	else
-		vim.cmd(string.format("edit +%d %s", plnum, pfilename))
+		core.jump_to(pfilename, plnum)
 	end
 end
 

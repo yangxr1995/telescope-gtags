@@ -3,6 +3,7 @@ local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
+local core = require("telescope-gtags.core")
 
 local M = {}
 
@@ -18,7 +19,7 @@ function M.gtags_picker(gtags_result)
 		vim.fn.settagstack(vim.fn.win_getid(), {
 			items = { { tagname = vim.fn.expand("<cword>"), from = vim.fn.getpos(".") } },
 		}, "a")
-		vim.api.nvim_command(string.format(":edit +%d %s", gtags_result[1].line_nr, gtags_result[1].path))
+		core.jump_to(gtags_result[1].path, gtags_result[1].line_nr)
 		return
 	end
 
@@ -50,7 +51,7 @@ function M.gtags_picker(gtags_result)
 				vim.fn.settagstack(vim.fn.win_getid(), {
 					items = { { tagname = vim.fn.expand("<cword>"), from = vim.fn.getpos(".") } },
 				}, "a")
-				vim.api.nvim_command(string.format(":edit +%d %s", selection.lnum, selection.filename))
+				core.jump_to(selection.filename, selection.lnum)
 			end)
 			return true
 		end,

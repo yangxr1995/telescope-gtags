@@ -100,4 +100,14 @@ function M.setAutoIncUpdate(enable)
 	end
 end
 
+--- Jump to file at line, auto-saving current buffer if modified
+---@param filename string
+---@param lnum number
+function M.jump_to(filename, lnum)
+	if vim.bo.modified then
+		vim.cmd("silent! write")
+	end
+	vim.cmd(string.format("edit +%d %s", lnum, filename))
+end
+
 return M
