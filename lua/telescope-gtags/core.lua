@@ -62,27 +62,31 @@ end
 
 --- Internal: run global -u asynchronously
 local function global_update()
-	local job_handle, pid = vim.loop.spawn("global", {
+	local job_handle, pid_or_err = vim.loop.spawn("global", {
 		args = { "-u" },
 	}, function(code, signal)
 		if code ~= 0 then
 			print("ERROR: global -u return errors")
 		end
 		M.job_running = false
-		job_handle:close()
+		if job_handle then
+			job_handle:close()
+		end
 	end)
 end
 
 --- Update gtags database asynchronously
 function M.updateGtags()
-	local handle = vim.loop.spawn("global", {
+	local handle, pid_or_err = vim.loop.spawn("global", {
 		args = { "--print", "dbpath" },
 	}, function(code, signal)
 		if code == 0 and M.job_running == false then
 			M.job_running = true
 			global_update()
 		end
-		handle:close()
+		if handle then
+			handle:close()
+		end
 	end)
 end
 
