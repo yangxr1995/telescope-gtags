@@ -49,19 +49,105 @@ local buf_lines = nil
 local cur_dir = nil
 local buf_last_pos = nil
 
--- Extract a potential function/symbol name from a line of code.
--- Uses a simple heuristic: first alphanumeric+underscore word.
-local function extract_symbol_from_text(text)
-	local trimmed = vim.trim(text)
-	local symbol = string.match(trimmed, "^([%w_]+)")
-	return symbol or trimmed
+--- Check if a line looks like a function declaration/definition rather than a call.
+--- A declaration has the symbol directly after type keywords (e.g. "int func(", "void *func(").
+--- A call has the symbol after "=", "(", ",", etc. (e.g. "int ret = func(", "if (func(").
+---@param line string the source line (trimmed)
+---@param symbol string the symbol to check
+---@return boolean true if it looks like a declaration
+local function is_declaration_line(line, symbol)
+	local trimmed = vim.trim(line)
+	-- Pattern: type-keyword optional-* symbol (  — the symbol IS being declared
+	local pattern = "^[%w_]+%s*%*%s*" .. vim.pesc(symbol) .. "%s*%("
+	if string.match(trimmed, pattern) then
+		return true
+	end
+	-- Pattern: type-keyword * symbol ;  — forward declaration without body
+	local fwd_pattern = "^[%w_]+%s*%*%s*" .. vim.pesc(symbol) .. "%s*;"
+	if string.match(trimmed, fwd_pattern) then
+		return true
+	end
+	return false
 end
 
--- Convert a gtags result entry to a tree node.
--- gtags grep format: {path, line_nr, text, raw}
+--- Use tree-sitter to check if a symbol at given line in a file is a call site (not a declaration).
+--- Falls back to regex-based detection if tree-sitter is unavailable.
+---@param filename string
+---@param lnum number 1-based line number
+---@param symbol string the symbol to check
+---@return boolean
+local function is_call_site(filename, lnum, symbol)
+	local abs_path = vim.fn.fnamemodify(filename, ":p")
+	local line_str
+
+	-- Try to read the actual line from a loaded buffer or file
+	local bufnr = vim.fn.bufnr(abs_path)
+	if bufnr ~= -1 and vim.api.nvim_buf_is_loaded(bufnr) then
+		local lines = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)
+		line_str = lines[1]
+	else
+		local ok, lines = pcall(vim.fn.readfile, abs_path)
+		if ok and lines[lnum] then
+			line_str = lines[lnum]
+		end
+	end
+
+	if line_str then
+		return not is_declaration_line(line_str, symbol)
+	end
+
+	return true -- can't read the line, keep the entry
+end
+
+--- Find the enclosing function name for a given line in a C file.
+--- Searches backwards from lnum for a function definition pattern.
+---@param filename string
+---@param lnum number 1-based line number
+---@return string|nil function name, or nil if not found
+local function find_enclosing_function(filename, lnum)
+	local abs_path = vim.fn.fnamemodify(filename, ":p")
+	local lines
+
+	local bufnr = vim.fn.bufnr(abs_path)
+	if bufnr ~= -1 and vim.api.nvim_buf_is_loaded(bufnr) then
+		lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	else
+		local ok, content = pcall(vim.fn.readfile, abs_path)
+		if not ok then
+			return nil
+		end
+		lines = content
+	end
+
+	-- Search backwards for a function definition:  type [*] name ( [params] ) {
+	for i = lnum - 1, 1, -1 do
+		local line = vim.trim(lines[i] or "")
+		-- Match: return_type function_name(  (possibly with * for pointer return)
+		local name = string.match(line, "^[%w_]+%s*%*?%s*([%w_]+)%s*%(")
+		if name then
+			-- Verify it's a definition (has { on this or next line), not a declaration
+			local rest = lines[i] or ""
+			local next_line = lines[i + 1] or ""
+			if rest:find("{", 1, true) or next_line:find("{", 1, true) then
+				return name
+			end
+		end
+	end
+
+	return nil
+end
+
+--- Convert a gtags result entry to a tree node.
+--- Uses the enclosing function name as the node symbol.
+--- gtags grep format: {path, line_nr, text, raw}
 local function gtags_entry_to_node(entry)
-	local symbol = extract_symbol_from_text(entry.text)
-	return tree.create_node(symbol, entry.path, entry.line_nr)
+	local func_name = find_enclosing_function(entry.path, entry.line_nr)
+	if not func_name then
+		-- Fallback: use first word from the gtags result text
+		local trimmed = vim.trim(entry.text)
+		func_name = string.match(trimmed, "^([%w_]+)") or trimmed
+	end
+	return tree.create_node(func_name, entry.path, entry.line_nr)
 end
 
 M.buf_lock = function(buf)
@@ -345,7 +431,9 @@ M.toggle_children = function()
 	local children = {}
 	for _, r in ipairs(gtags_res) do
 		local node = gtags_entry_to_node(r)
-		table.insert(children, node)
+		if is_call_site(node.data.filename, node.data.lnum, node.data.symbol) then
+			table.insert(children, node)
+		end
 	end
 
 	root = tree.update_node(root, parent_id, children)
@@ -378,7 +466,9 @@ M.open = function(dir, symbol)
 	local children = {}
 	for _, r in ipairs(gtags_res) do
 		local node = gtags_entry_to_node(r)
-		table.insert(children, node)
+		if is_call_site(node.data.filename, node.data.lnum, node.data.symbol) then
+			table.insert(children, node)
+		end
 	end
 
 	root = tree.create_node(symbol, "", 0)
