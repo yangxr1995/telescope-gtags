@@ -1,6 +1,5 @@
 local core = require("telescope-gtags.core")
 local picker = require("telescope-gtags.picker")
-local stack_view = require("telescope-gtags.stack_view")
 
 local M = { job_running = false }
 
@@ -57,25 +56,6 @@ end
 
 function M.showCurrentFileTags()
 	picker.gtags_picker(core.exec_global_current_file())
-end
-
--- Stack View API
-function M.stackViewDown(symbol)
-	symbol = symbol or vim.fn.expand("<cword>")
-	stack_view.open("down", symbol)
-end
-
-function M.stackViewToggle()
-	stack_view.toggle_win()
-end
-
---- Setup stack_view with options
----@param opts table
-function M.setup(opts)
-	opts = opts or {}
-	if opts.stack_view then
-		stack_view.setup(opts.stack_view)
-	end
 end
 
 return M
